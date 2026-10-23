@@ -1,4 +1,5 @@
 import type { FileState } from "../types";
+import { fileColorStyle } from "./SystemMap";
 
 interface Props {
   files: FileState[];
@@ -7,11 +8,6 @@ interface Props {
   query: string;
   onSelect: (file: FileState) => void;
 }
-
-const palette: Record<string, string> = {
-  ts: "#5b8cff", tsx: "#7b6cff", js: "#f3cc5b", jsx: "#f3a65b", rs: "#e77c58",
-  css: "#d865b0", md: "#76b7a6", json: "#a7b067", html: "#e89564", file: "#788390",
-};
 
 export function RepositoryMap({ files, changedPaths, selectedId, query, onSelect }: Props) {
   const filtered = files.filter((file) => file.path.toLowerCase().includes(query.toLowerCase()));
@@ -26,7 +22,7 @@ export function RepositoryMap({ files, changedPaths, selectedId, query, onSelect
     <div className="repository-map" aria-label="Repository file map">
       {[...groups.entries()].map(([directory, group]) => (
         <section className="map-region" key={directory}>
-          <header><span>{directory}</span><small>{group.length} {group.length === 1 ? "file" : "files"}</small></header>
+          <header><span><i />{directory}</span><small>{group.length} {group.length === 1 ? "file" : "files"}</small></header>
           <div className="file-grid">
             {group.map((file) => {
               const active = changedPaths.has(file.path);
@@ -36,7 +32,7 @@ export function RepositoryMap({ files, changedPaths, selectedId, query, onSelect
                   key={file.id}
                   onClick={() => onSelect(file)}
                   title={`${file.path} · ${file.changes} changes`}
-                  style={{ "--file-color": palette[file.extension] ?? palette.file } as React.CSSProperties}
+                  style={fileColorStyle(file.extension)}
                 >
                   <span className="file-mark" />
                   <span className="file-name">{file.path.split("/").at(-1)}</span>

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Boxes, CircleDot, GitBranch, History, Pause, Play, Search, Sparkles } from "lucide-react";
+import { Activity, ArrowRight, Boxes, CircleDot, GitBranch, History, LayoutGrid, Network, Pause, Play, Search, Sparkles, X } from "lucide-react";
 import { analyzeRepository } from "./bridge";
 import { demoAnalysis } from "./demo";
 import { compareSnapshots, fileHistory, snapshotAt } from "./history";
 import type { FileState, RepositoryAnalysis } from "./types";
 import { RepositoryMap } from "./components/RepositoryMap";
+import { SystemMap } from "./components/SystemMap";
+import { buildDirectoryRelationships } from "./relationships";
 
 const dateLabel = (value: string) => new Intl.DateTimeFormat("en", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
 
@@ -19,14 +21,22 @@ export default function App() {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [view, setView] = useState<"structure" | "relationships">(() =>
+    new URLSearchParams(window.location.search).get("view") === "relationships" ? "relationships" : "structure",
+  );
 
   const current = analysis.commits[index];
   const snapshot = useMemo(() => snapshotAt(analysis, index), [analysis, index]);
   const authors = useMemo(() => [...new Set(analysis.commits.map((commit) => commit.author))], [analysis]);
-  const visibleFiles = author === "all" ? snapshot.files : snapshot.files.filter((file) => fileHistory(analysis.commits.slice(0, index + 1), file).some((commit) => commit.author === author));
+  const authorFiles = author === "all" ? snapshot.files : snapshot.files.filter((file) => fileHistory(analysis.commits.slice(0, index + 1), file).some((commit) => commit.author === author));
+  const visibleFiles = authorFiles.filter((file) => file.path.toLowerCase().includes(pathQuery.toLowerCase()));
   const selectedState = selected ? snapshot.files.find((file) => file.id === selected.id) : undefined;
   const selectedHistory = selectedState ? fileHistory(analysis.commits.slice(0, index + 1), selectedState).slice().reverse() : [];
   const comparison = compareIndex === undefined ? undefined : compareSnapshots(snapshotAt(analysis, compareIndex), snapshot);
+  const relationships = useMemo(
+    () => buildDirectoryRelationships(visibleFiles, analysis.commits.slice(0, index + 1)),
+    [visibleFiles, analysis.commits, index],
+  );
 
   useEffect(() => {
     if (!playing || index >= analysis.commits.length - 1) {
@@ -58,15 +68,22 @@ export default function App() {
       {error && <div className="error-banner">{error}</div>}
 
       <section className="workspace">
-        <aside className="left-panel">
+        <aside className="left-panel scroll-panel">
           <div className="eyebrow">Repository</div>
           <h1>{analysis.name}</h1>
           <div className="branch"><GitBranch size={15} /> {analysis.branch}<span>{analysis.commits.length} commits</span></div>
 
           <div className="panel-section"><label>Filter paths</label><div className="search"><Search size={15} /><input value={pathQuery} onChange={(event) => setPathQuery(event.target.value)} placeholder="src, tests, .rs…" /></div></div>
+          {pathQuery && <button className="active-filter" aria-label={`Clear path filter ${pathQuery}`} onClick={() => setPathQuery("")}><span>{pathQuery}</span><X size={13} /></button>}
           <div className="panel-section"><label>Contributor</label><select value={author} onChange={(event) => setAuthor(event.target.value)}><option value="all">Everyone</option>{authors.map((name) => <option key={name}>{name}</option>)}</select></div>
 
-          <div className="panel-section legend"><label>Language</label>{Object.entries({ TypeScript: "#5b8cff", Rust: "#e77c58", Styles: "#d865b0", Docs: "#76b7a6", Other: "#788390" }).map(([name, color]) => <span key={name}><i style={{ background: color }} />{name}</span>)}</div>
+          <div className="panel-section legend"><label>File language</label>{Object.entries({ TypeScript: "#6394ff", Rust: "#ed815e", Styles: "#dd6fba", Docs: "#7bc5ae", Other: "#7d8996" }).map(([name, color]) => <span key={name}><i style={{ background: color }} />{name}</span>)}</div>
+
+          <div className="repository-facts">
+            <div><strong>{visibleFiles.length}</strong><span>files</span></div>
+            <div><strong>{relationships.nodes.length}</strong><span>modules</span></div>
+            <div><strong>{relationships.links.length}</strong><span>links</span></div>
+          </div>
 
           <div className="compare-card">
             <div><Boxes size={16} /><strong>Compare points</strong></div>
@@ -75,8 +92,21 @@ export default function App() {
         </aside>
 
         <section className="main-stage">
-          <div className="stage-heading"><div><span className="eyebrow">Architectural map</span><h2>{visibleFiles.length} files at {current?.shortHash}</h2></div><div className="commit-badge"><span>{current?.changes.length ?? 0}</span> changed in this commit</div></div>
-          <RepositoryMap files={visibleFiles} changedPaths={snapshot.changedPaths} selectedId={selectedState?.id} query={pathQuery} onSelect={setSelected} />
+          <div className="stage-heading">
+            <div><span className="eyebrow">Repository landscape</span><h2>{visibleFiles.length} files across {relationships.nodes.length} modules</h2></div>
+            <div className="stage-actions">
+              <div className="view-switch" aria-label="Visualization mode">
+                <button className={view === "structure" ? "active" : ""} aria-pressed={view === "structure"} onClick={() => setView("structure")}><LayoutGrid size={14} />Structure</button>
+                <button className={view === "relationships" ? "active" : ""} aria-pressed={view === "relationships"} onClick={() => setView("relationships")}><Network size={14} />Relationships</button>
+              </div>
+              <div className="commit-badge"><Activity size={12} /><span>{current?.changes.length ?? 0}</span> changed now</div>
+            </div>
+          </div>
+          <div className="visualization-viewport">
+            {view === "structure"
+              ? <RepositoryMap files={visibleFiles} changedPaths={snapshot.changedPaths} selectedId={selectedState?.id} query="" onSelect={setSelected} />
+              : <SystemMap files={visibleFiles} commits={analysis.commits.slice(0, index + 1)} changedPaths={snapshot.changedPaths} selectedId={selectedState?.id} onSelect={setSelected} onDirectorySelect={(directory) => setPathQuery(directory === "root" ? "" : `${directory}/`)} />}
+          </div>
 
           <div className="timeline-panel">
             <div className="commit-summary"><button className="play" aria-label={playing ? "Pause history" : "Play history"} onClick={() => { if (index >= analysis.commits.length - 1) setIndex(0); setPlaying((value) => !value); }}>{playing ? <Pause size={18} /> : <Play size={18} />}</button><div className="commit-dot" /><div><strong>{current?.subject}</strong><span>{current?.author} · {current && dateLabel(current.date)}</span></div><code>{current?.shortHash}</code></div>

@@ -7,7 +7,8 @@ This repository currently contains the first vertical slice:
 - read-only Git history analysis through the installed `git` command;
 - additions, modifications, deletions, and rename tracking;
 - an interactive commit timeline with playback;
-- a stable directory-and-file map;
+- a stable, scroll-contained directory-and-file map;
+- a module relationship view built from repeated co-change evidence;
 - path and contributor filters;
 - file history inspection; and
 - comparison between two points in history.
@@ -57,6 +58,8 @@ Local repository (read-only)
 ```
 
 The current layout deliberately leaves empty space when files disappear and reuses identity when Git detects a rename. This is the first step toward spatial continuity; a later layout engine will persist coordinates in a cache rather than deriving them during each render.
+
+The relationship view groups files by top-level module and connects modules that repeatedly changed in the same commits. These are deliberately labelled as co-change relationships, not source-code dependencies. The fifteen largest visible modules are shown when a repository has a very wide top level; filters can narrow the graph further.
 
 ## Current boundaries
 
